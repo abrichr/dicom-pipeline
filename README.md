@@ -20,7 +20,7 @@
 
     I used multiprocessing instead of multithreading because the former avoids Python's Global Interpreter Lock, thereby fully leveraging multiple processors.
 
-2) The primary safeguard that prevents the pipeline from crashing when run on thousands of studies is the fact that it only loads a single batch at a time. This prevents it from using too memory unnecessarily.
+2) The primary safeguard that prevents the pipeline from crashing when run on thousands of studies is the fact that it only loads a single batch at a time. This prevents it from using too much memory unnecessarily.
 
 3) I modified the function from Part 1 by moving the functionality that loads the file contents into a different function which accepts an iterator over path tuples. This way I was able to load subsets of the data in batches, instead of all of it at once.
 
