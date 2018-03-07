@@ -28,6 +28,7 @@ import csv
 import numpy as np
 import logging
 import multiprocessing as mp
+import sys
 import time
 from matplotlib import pyplot as plt
 from os import listdir, getpid
@@ -283,13 +284,28 @@ def main():
       '-b',
       help='Run part 2',
       action='store_true')
+  parser.add_argument(
+      '-s',
+      help='Show masked dicoms',
+      action='store_true')
+  parser.add_argument(
+      '-w',
+      help='Write masked dicoms to disk',
+      action='store_true')
   args = parser.parse_args()
 
+  if len(sys.argv) == 1:
+    parser.print_help()
+    sys.exit()
+
+  show = args.s
+  save = args.w
+
   if args.a:
-    run_part_1()
+    run_part_1(show, save)
 
   if args.b:
-    run_part_2()
+    run_part_2(show, save)
 
 if __name__ == '__main__':
   main()
