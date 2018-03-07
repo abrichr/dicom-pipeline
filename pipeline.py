@@ -25,10 +25,6 @@ MASK_OVERLAY_ALPHA = 0.25
 # Number of image/target pairs to load per batch
 BATCH_SIZE = 8
 
-# Number of worker processes to use when loading batches asynchronously
-# (if None, defaults to number of CPUs reported by multiprocessing.cpu_count())
-NUM_WORKERS = None
-
 
 import argparse
 import csv
@@ -55,7 +51,6 @@ logger.setLevel(logging.DEBUG if DEBUG else logging.INFO)
 
 DICOM_DIR = join(DATA_DIR, 'dicoms')
 CONTOUR_DIR = join(DATA_DIR, 'contourfiles')
-NUM_WORKERS = NUM_WORKERS or mp.cpu_count()
 
 #########
 # Part 1
