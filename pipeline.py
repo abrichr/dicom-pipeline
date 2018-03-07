@@ -236,37 +236,33 @@ def _make_masked_dicom(i, dicom, mask, show=False, save=False):
     logger.info('Saving masked dicom %s' % filename)
     plt.savefig(filename)
 
-def _load_dicom_contour_paths(
-    path_tups,
-    show_masked_dicoms=False,
-    save_masked_dicoms=False,
-):
+def _load_dicom_contour_paths(path_tups):
   '''Returns an iterator over image/mask tuples loaded from the given paths'''
 
   for i, (dicom_path, contour_path) in enumerate(path_tups):
-    logger.debug('loading paths:\n\tdicom_path: %s\n\tcontour_path: %s' % (
-      dicom_path, contour_path))
-
     # read dicom data
+    logger.debug('loading dicom_path: %s' % dicom_path)
     dcm_dict = parse_dicom_file(dicom_path)
     dicom = dcm_dict['pixel_data']
     width, height = dicom.shape
 
     # read contour data
+    logger.debug('loading contour_path: %s' % contour_path)
     coords_list = parse_contour_file(contour_path)
     mask = poly_to_mask(coords_list, width, height)
 
-    _make_masked_dicom(i, dicom, mask, show_masked_dicoms, save_masked_dicoms)
-
     yield (dicom, mask)
 
-def run_part_1():
+def run_part_1(show_masked_dicoms=False, save_masked_dicoms=False):
   tups = get_dicom_mask_tups()
   for i, (dicom, mask) in enumerate(tups):
     logger.info('iteration %d, dicom.shape: %s, mask.shape: %s' % (
       i, dicom.shape, mask.shape))
+    _make_masked_dicom(i, dicom, mask,
+        show=show_masked_dicoms,
+        save=save_masked_dicoms)
 
-def run_part_2(save_masked_dicoms=False):
+def run_part_2(show_masked_dicoms=False, save_masked_dicoms=False):
   batch_feeder = BatchFeeder()
   for i, (dicom, mask) in enumerate(batch_feeder.get_next_batch()):
     logger.info('iteration %d, dicom.shape: %s, mask.shape: %s' % (
@@ -276,7 +272,9 @@ def run_part_2(save_masked_dicoms=False):
     for j in range(N):
       d = dicom[j,:,:]
       m = mask[j,:,:]
-      _make_masked_dicom(i*N + j, d, m, save=save_masked_dicoms)
+      _make_masked_dicom(i*N + j, d, m,
+        show=show_masked_dicoms,
+        save=save_masked_dicoms)
 
     # simulate training
     logger.info('training...')
