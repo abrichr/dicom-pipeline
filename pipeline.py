@@ -81,7 +81,8 @@ class BatchFeeder(object):
     self._batch_num = 0
     self._q = mp.Manager().Queue()
 
-    path_tups = _get_dicom_contour_path_tups(dicom_dir, contour_dir)
+    path_tups = _get_dicom_contour_path_tups(
+        dicom_dir, contour_dir, randomize=True)
     self._path_tups_chunked = np.array_split(path_tups, batch_size)
 
     # pre-load first batch
