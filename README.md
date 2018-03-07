@@ -9,3 +9,27 @@ Part 1: Parse the DICOM images and Contour Files
 If additional scale were required, I would distribute the child processes on multiple machines. The parent process would yield locators to the child jobs, which would in turn yield the data directly to the caller.
 
 4) If this pipeline were parallelized, I would add additional logic to ensure that each dicom/contour pair is only ever read by a single child process.
+
+Part 2: Model training pipeline
+
+1) Loading batches asynchronously is done via an object of class BatchFeeder, which loads batches in a separate process. Upon instantiation, the BatchFeeder pre-emptively loads a batch. Then, once the next batch is requested, it loads the following batch before returning the current one. This way, a batch is returned as soon as possible afterit is requested, but without wasting memory by loading more than one at a time.
+
+I also considered loading batches asynchronously via a multiprocessing.Pool. However, Pool map functions consume their entire iterable as soon as possible, thereby wasting memory. 
+
+I used multiprocessing instead of multithreading because the former avoids Python's Global Interpreter Lock, thereby fully leveraging multiple processors.
+
+2) The primary safeguard that prevents the pipeline from crashing when run on thousands of studies is the fact that it only loads a single batch at a time. This prevents it from using too memory unnecessarily.
+
+3) I modified the function from Part 1 by moving the functionality that loads the file contents into a different function which accepts an iterator over path tuples. This way I was able to load subsets of the data in batches, instead of all of it at once.
+
+4) To verify that the pipeline was working correctly, I observed the logs to confirm that only a single batch was being read at a time, and that it was being read during the time at which a model would be training on it.
+
+I also performed the same visual inspection as in Question 1 of Part 1.
+
+5) TODO:
+
+- Use a configurable number of background process to load batches more quickly. Currently only one processed is used.
+- Make the number of batches to load in the background at a time configurable. Currently only one batch is loaded at a time.
+- More thorough unit test coverage. 
+- Log to cloud logging service
+- Deploy across multiple servers
