@@ -214,13 +214,40 @@ def _get_dicom_contour_path_tups(
 
   return path_tups
 
+def _make_masked_dicom(i, dicom, mask, show=False, save=False):
+  if not (show or save):
+    return
+
+  ax = plt.subplot(1,3,1)
+  plt.imshow(dicom)
+  ax.set_title('DICOM')
+
+  ax = plt.subplot(1,3,2)
+  plt.imshow(mask)
+  ax.set_title('Mask')
+
+  ax = plt.subplot(1,3,3)
+  plt.imshow(dicom)
+  plt.imshow(mask, alpha=MASK_OVERLAY_ALPHA)
+  ax.set_title('Overlay')
+
+  if show:
+    logger.info('Displaying masked dicom %s' % i)
+    plt.show()
+
+  if save:
+    filename = 'tmp_%04d.png' % i
+    logger.info('Saving masked dicom %s' % filename)
+    plt.savefig(filename)
+
 def _load_dicom_contour_paths(
     path_tups,
     show_masked_dicoms=False,
+    save_masked_dicoms=False,
 ):
   '''Returns an iterator over image/mask tuples loaded from the given paths'''
 
-  for dicom_path, contour_path in path_tups:
+  for i, (dicom_path, contour_path) in enumerate(path_tups):
     logger.debug('loading paths:\n\tdicom_path: %s\n\tcontour_path: %s' % (
       dicom_path, contour_path))
 
@@ -233,21 +260,7 @@ def _load_dicom_contour_paths(
     coords_list = parse_contour_file(contour_path)
     mask = poly_to_mask(coords_list, width, height)
 
-    if show_masked_dicoms:
-      ax = plt.subplot(1,3,1)
-      plt.imshow(dicom)
-      ax.set_title('DICOM')
-
-      ax = plt.subplot(1,3,2) 
-      plt.imshow(mask)
-      ax.set_title('Mask')
-
-      ax = plt.subplot(1,3,3)
-      plt.imshow(dicom)
-      plt.imshow(mask, alpha=MASK_OVERLAY_ALPHA)
-      ax.set_title('Overlay')
-
-      plt.show()
+    _make_masked_dicom(i, dicom, mask, show_masked_dicoms, save_masked_dicoms)
 
     yield (dicom, mask)
 
@@ -257,11 +270,17 @@ def run_part_1():
     logger.info('iteration %d, dicom.shape: %s, mask.shape: %s' % (
       i, dicom.shape, mask.shape))
 
-def run_part_2():
+def run_part_2(save_masked_dicoms=False):
   batch_feeder = BatchFeeder()
   for i, (dicom, mask) in enumerate(batch_feeder.get_next_batch()):
     logger.info('iteration %d, dicom.shape: %s, mask.shape: %s' % (
       i, dicom.shape, mask.shape))
+
+    N = dicom.shape[0]
+    for j in range(N):
+      d = dicom[j,:,:]
+      m = mask[j,:,:]
+      _make_masked_dicom(i*N + j, d, m, save=save_masked_dicoms)
 
     # simulate training
     logger.info('training...')
