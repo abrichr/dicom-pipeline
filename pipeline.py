@@ -5,7 +5,7 @@
 
 
 # Set to True for verbose output
-DEBUG = True
+DEBUG = False
 
 # Absolute or relative path to data directory
 DATA_DIR = 'final_data'
@@ -22,11 +22,12 @@ CONTOUR_KEY = 'original_id'
 # Alpha transparency of mask overlaid on DICOM
 MASK_OVERLAY_ALPHA = 0.25
 
-# Batch size
+# Number of image/target pairs to load per batch
 BATCH_SIZE = 8
 
 # Number of worker processes to use when loading batches asynchronously
-NUM_WORKERS = 4
+# (if None, defaults to number of CPUs reported by multiprocessing.cpu_count())
+NUM_WORKERS = None
 
 
 import argparse
@@ -34,6 +35,7 @@ import csv
 import numpy as np
 import logging
 import multiprocessing as mp
+import time
 from collections import Counter
 from matplotlib import pyplot as plt
 from os import listdir, getpid
@@ -53,13 +55,83 @@ logger.setLevel(logging.DEBUG if DEBUG else logging.INFO)
 
 DICOM_DIR = join(DATA_DIR, 'dicoms')
 CONTOUR_DIR = join(DATA_DIR, 'contourfiles')
+NUM_WORKERS = NUM_WORKERS or mp.cpu_count()
+
+#########
+# Part 1
+#########
+
+def get_dicom_mask_tups(
+    dicom_dir=DICOM_DIR,
+    contour_dir=CONTOUR_DIR,
+):
+  '''Returns an iterator over image/mask tuples loaded from the given paths'''
+
+  path_tups = _get_dicom_contour_path_tups(dicom_dir, contour_dir)
+  yield from _load_dicom_contour_paths(path_tups)
+
+
+#########
+# Part 2
+#########
+
+class BatchFeeder(object):
+  '''Load batches one by one in a separate process'''
+
+  def __init__(self,
+      dicom_dir=DICOM_DIR,
+      contour_dir=CONTOUR_DIR,
+      batch_size=BATCH_SIZE,
+  ):
+    self._batch_num = 0
+    self._q = mp.Manager().Queue()
+
+    path_tups = _get_dicom_contour_path_tups(dicom_dir, contour_dir)
+    self._path_tups_chunked = np.array_split(path_tups, batch_size)
+
+    # pre-load first batch
+    self._have_next_batch = self._load_next_batch()
+
+  def _load_batch(self, path_tups):
+    '''Load the files contained in the given paths'''
+    pid = getpid()
+    logger.debug('worker %d loading batch of len %s' % (pid, len(path_tups)))
+    gen = _load_dicom_contour_paths(path_tups)
+    images, targets = [], []
+    for image, target in gen:
+      images.append(image)
+      targets.append(target)
+    logger.debug('worker %s batch loaded' % pid)
+    self._q.put((np.array(images), np.array(targets)))
+
+  def _load_next_batch(self):
+    '''Start a process to load the next batch'''
+    if self._batch_num < len(self._path_tups_chunked):
+      path_tups = self._path_tups_chunked[self._batch_num]
+      p = mp.Process(target=self._load_batch, args=(path_tups,))
+      p.start()
+      self._batch_num += 1
+    return self._batch_num < len(self._path_tups_chunked)
+
+  def get_next_batch(self):
+    '''Start loading next batch, and return previously loaded batch'''
+    while self._have_next_batch:
+      self._have_next_batch = self._load_next_batch()
+      yield self._q.get()
+    # we should have one more result waiting to be yielded
+    yield self._q.get()
+    raise StopIteration
+
+###################
+# Helper functions
+###################
 
 def _get_cid_by_did(
-    link_path=join(DATA_DIR, LINK_FNAME),
+    link_path,
     dicom_key=DICOM_KEY,
     contour_key=CONTOUR_KEY,
 ):
-  """Read links between dicoms and contours"""
+  '''Read links between dicoms and contours'''
 
   cid_by_did = {}
   with open(link_path, 'r') as f:
@@ -72,6 +144,7 @@ def _get_cid_by_did(
   return cid_by_did
 
 def _get_path_by_id(base_path, get_id_func):
+  '''Return a dict of id: path under the given base path'''
   logger.debug('base_path: %s' % base_path)
   path_by_id = {}
   for f in listdir(base_path):
@@ -93,13 +166,15 @@ def _get_path_by_id(base_path, get_id_func):
 def _get_dicom_contour_path_tups(
     dicom_dir,
     contour_dir,
+    link_path=join(DATA_DIR, LINK_FNAME),
     randomize=False,
     random_seed=None,
 ):
+  '''Returns a list of dicom/contour path tuples'''
 
-  cid_by_did = _get_cid_by_did()
+  cid_by_did = _get_cid_by_did(link_path)
   
-  rval = []
+  path_tups = []
   for d_id in sorted(cid_by_did.keys()):
     c_id = cid_by_did[d_id]
 
@@ -120,29 +195,31 @@ def _get_dicom_contour_path_tups(
     # pair up common ids
     dicom_ids = set(dicom_path_by_id.keys())
     contour_ids = set(contour_path_by_id.keys())
-    common_ids = list(dicom_ids.intersection(contour_ids))
-    logger.debug('common_ids: %s' % pformat(common_ids))
+    common_ids = sorted(list(dicom_ids.intersection(contour_ids)))
+    logger.debug('common_ids: %s' % common_ids)
 
-    for _id in sorted(common_ids):
+    for _id in common_ids:
       dicom_path = dicom_path_by_id[_id]
       contour_path = contour_path_by_id[_id]
-      rval.append((dicom_path, contour_path))
+      path_tups.append((dicom_path, contour_path))
   
   # shuffle
   if randomize:
     if random_seed is not None:
       logger.debug('setting random seed: %s' % random_seed)
       seed(random_seed)
-    shuffle(rval)
+    shuffle(path_tups)
 
-  logger.debug('rval: %s' % pformat(rval))
+  logger.debug('path_tups:\n%s' % pformat(path_tups))
 
-  return rval
+  return path_tups
 
 def _load_dicom_contour_paths(
     path_tups,
     show_masked_dicoms=False,
 ):
+  '''Returns an iterator over image/mask tuples loaded from the given paths'''
+
   for dicom_path, contour_path in path_tups:
     logger.debug('loading paths:\n\tdicom_path: %s\n\tcontour_path: %s' % (
       dicom_path, contour_path))
@@ -172,58 +249,23 @@ def _load_dicom_contour_paths(
 
       plt.show()
 
-    #yield (np.random.randint(10, size=(2,3)), np.random.randint(10, size=(2,3)))
     yield (dicom, mask)
-  
-# Part 1
-def get_dicom_mask_tups(
-    dicom_dir=DICOM_DIR,
-    contour_dir=CONTOUR_DIR,
-):
-  '''
-  Function that takes in the directories containing the DICOM and contour files
-  and provides an iterator over two-element tuples, where each two-element tuple
-  consists of an image and its associated mask as Numpy arrays.
-  '''
 
-  path_tups = _get_dicom_contour_path_tups(dicom_dir, contour_dir)
-  yield from _load_dicom_contour_paths(path_tups)
+def run_part_1():
+  tups = get_dicom_mask_tups()
+  for i, (dicom, mask) in enumerate(tups):
+    logger.info('iteration %d, dicom.shape: %s, mask.shape: %s' % (
+      i, dicom.shape, mask.shape))
 
-def _load_batch(path_tups):
-  pid = getpid()
-  logger.debug('worker %d loading batch of len %s' % (pid, len(path_tups)))
-  gen = _load_dicom_contour_paths(path_tups)
-  images, targets = [], []
-  for image, target in gen:
-    images.append(image)
-    targets.append(target)
-  logger.debug('worker %s batch loaded' % pid)
-  return np.array(images), np.array(targets)
+def run_part_2():
+  batch_feeder = BatchFeeder()
+  for i, (dicom, mask) in enumerate(batch_feeder.get_next_batch()):
+    logger.info('iteration %d, dicom.shape: %s, mask.shape: %s' % (
+      i, dicom.shape, mask.shape))
 
-def _to_chunks(l, n):
-  '''Yield successive n-sized chunks from l'''
-  rval = []
-  for i in range(0, len(l), n):
-    rval.append(l[i:i + n])
-  return rval
-
-# Part 2
-def get_batches(
-    dicom_dir=DICOM_DIR,
-    contour_dir=CONTOUR_DIR,
-    batch_size=BATCH_SIZE,
-    num_workers=NUM_WORKERS
-):
-  path_tups = _get_dicom_contour_path_tups(dicom_dir, contour_dir)
-  path_tups_chunked = _to_chunks(path_tups, batch_size)
-
-  pool = mp.Pool(num_workers)
-  batches = pool.imap_unordered(
-      _load_batch,
-      path_tups_chunked,
-  )
-  for images, targets in batches:
-    yield images, targets
+    # simulate training
+    logger.info('training...')
+    time.sleep(1)
 
 def main():
   parser = argparse.ArgumentParser()
@@ -238,23 +280,10 @@ def main():
   args = parser.parse_args()
 
   if args.a:
-    tups = get_dicom_mask_tups()
-    for i, (dicom, mask) in enumerate(tups):
-      logger.info('iteration %d, dicom.shape: %s, mask.shape: %s' % (
-        i, dicom.shape, mask.shape))
+    run_part_1()
 
   if args.b:
-    batches = get_batches()
-    try:
-      i = 0
-      while True:
-        dicom, mask = next(batches)
-        logger.info('iteration %d, dicom.shape: %s, mask.shape: %s' % (
-          i, dicom.shape, mask.shape))
-        import time; time.sleep(1)
-        i += 1
-    except StopIteration:
-      pass
+    run_part_2()
 
 if __name__ == '__main__':
   main()
