@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
-
 """Pipeline for parsing DICOM and i-contour files"""
-
 
 # Set to True for verbose output
 DEBUG = False
@@ -25,24 +23,19 @@ MASK_OVERLAY_ALPHA = 0.25
 # Number of image/target pairs to load per batch
 BATCH_SIZE = 8
 
-
 import argparse
 import csv
 import numpy as np
 import logging
 import multiprocessing as mp
 import time
-from collections import Counter
 from matplotlib import pyplot as plt
 from os import listdir, getpid
 from os.path import isfile, join
-from pprint import pprint, pformat
+from pprint import pformat
 from random import shuffle, seed
-from threading import get_ident 
-
 
 from parsing import parse_contour_file, parse_dicom_file, poly_to_mask
-
 
 _log_format = '%(asctime)s : %(name)s : %(levelname)s : %(message)s'
 logging.basicConfig(format=_log_format)
