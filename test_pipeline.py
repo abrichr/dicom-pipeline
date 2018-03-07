@@ -3,7 +3,13 @@ import os
 import pytest
 import tempfile
 
-from pipeline import _get_cid_by_did, DICOM_KEY, CONTOUR_KEY
+from pipeline import (
+    DICOM_KEY,
+    CONTOUR_KEY,
+    _get_cid_by_did,
+    get_dicom_mask_tups,
+    BatchFeeder
+)
 
 links = [
   ('patient_id_1', 'original_id_1'),
@@ -28,5 +34,13 @@ def test_get_cid_by_did(link_path):
   cid_by_did = _get_cid_by_did(link_path)
   for did, cid in links:
     assert cid_by_did[did] == cid
+
+def test_get_dicom_mask_tups__smoke():
+  tups = get_dicom_mask_tups()
+
+def test_BatchFeeder__smoke():
+  batch_feeder = BatchFeeder()
+  [b for b in batch_feeder.get_next_batch()]
+
 
 # TODO: more tests
