@@ -8,7 +8,7 @@
 
 3) If the pipeline were to be run on millions of images, and speed was paramount, I would parallelize it to run as fast as possible by having the main process create a `multiprocessing.Pool` of processes, each responsible for reading dicom/contour pairs. The parent process would then be responsible for feeding the child processes with the appropriate paths, and yielding the resulting data tuples back to the caller.
 
-If additional scale were required, I would distribute the child processes on multiple machines. The parent process would yield locators to the child jobs, which would in turn yield the data directly to the caller.
+    If additional scale were required, I would distribute the child processes on multiple machines. The parent process would yield locators to the child jobs, which would in turn yield the data directly to the caller.
 
 4) If this pipeline were parallelized, I would add additional logic to ensure that each dicom/contour pair is only ever read by a single child process, and to prevent the pipeline from running out of memory and/or loading too much data into memory than is required at a time.
 
@@ -16,9 +16,9 @@ If additional scale were required, I would distribute the child processes on mul
 
 1) Loading batches asynchronously is done via an object of class BatchFeeder, which loads batches in a separate process. Upon instantiation, the BatchFeeder pre-emptively loads the first batch. Then, once a batch is requested, it loads the next batch before returning the one that was previously loaded. This way a batch is returned as soon as possible after it is requested, but without wasting memory by loading more than one at a time.
 
-I also considered loading batches asynchronously via a multiprocessing.Pool. However, Pool map functions consume their entire iterable as soon as possible, thereby wasting memory. 
+    I also considered loading batches asynchronously via a multiprocessing.Pool. However, Pool map functions consume their entire iterable as soon as possible, thereby wasting memory. 
 
-I used multiprocessing instead of multithreading because the former avoids Python's Global Interpreter Lock, thereby fully leveraging multiple processors.
+    I used multiprocessing instead of multithreading because the former avoids Python's Global Interpreter Lock, thereby fully leveraging multiple processors.
 
 2) The primary safeguard that prevents the pipeline from crashing when run on thousands of studies is the fact that it only loads a single batch at a time. This prevents it from using too memory unnecessarily.
 
@@ -26,7 +26,7 @@ I used multiprocessing instead of multithreading because the former avoids Pytho
 
 4) To verify that the pipeline was working correctly, I observed the logs to confirm that only a single batch was being read at a time, and that it was being read during the time at which a model would be training on it.
 
-I also performed the same visual inspection as in Question 1 of Part 1.
+    I also performed the same visual inspection as in Question 1 of Part 1.
 
 5) TODO:
 
