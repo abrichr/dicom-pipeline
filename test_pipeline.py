@@ -36,7 +36,7 @@ def test_get_cid_by_did(link_path):
     assert cid_by_did[did] == cid
 
 def test_get_dicom_mask_tups__smoke():
-  tups = get_dicom_mask_tups()
+  [b for b in get_dicom_mask_tups()]
 
 def test_BatchFeeder__smoke():
   batch_feeder = BatchFeeder()
