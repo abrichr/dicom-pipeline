@@ -1,4 +1,4 @@
-Part 1: Parse the DICOM images and Contour Files
+## Part 1: Parse the DICOM images and Contour Files
 
 1) I verified that I was parsing the contours correctly by plotting the resulting mask over the corresponding DICOM and visually confirming that they matched (i.e. that the mask completely covered and was completely contained within a single structure of relatively uniform brightness). 
 
@@ -10,11 +10,11 @@ Part 1: Parse the DICOM images and Contour Files
 
 If additional scale were required, I would distribute the child processes on multiple machines. The parent process would yield locators to the child jobs, which would in turn yield the data directly to the caller.
 
-4) If this pipeline were parallelized, I would add additional logic to ensure that each dicom/contour pair is only ever read by a single child process.
+4) If this pipeline were parallelized, I would add additional logic to ensure that each dicom/contour pair is only ever read by a single child process, and to prevent the pipeline from running out of memory and/or loading too much data into memory than is required at a time.
 
-Part 2: Model training pipeline
+## Part 2: Model training pipeline
 
-1) Loading batches asynchronously is done via an object of class BatchFeeder, which loads batches in a separate process. Upon instantiation, the BatchFeeder pre-emptively loads a batch. Then, once the next batch is requested, it loads the following batch before returning the current one. This way, a batch is returned as soon as possible afterit is requested, but without wasting memory by loading more than one at a time.
+1) Loading batches asynchronously is done via an object of class BatchFeeder, which loads batches in a separate process. Upon instantiation, the BatchFeeder pre-emptively loads the first batch. Then, once a batch is requested, it loads the next batch before returning the one that was previously loaded. This way a batch is returned as soon as possible after it is requested, but without wasting memory by loading more than one at a time.
 
 I also considered loading batches asynchronously via a multiprocessing.Pool. However, Pool map functions consume their entire iterable as soon as possible, thereby wasting memory. 
 
